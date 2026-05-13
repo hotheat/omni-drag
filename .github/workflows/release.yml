@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.asset_suffix }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            target_arch: arm64
+            app_bundle_name: OmniDrag
+            asset_suffix: arm64
+          - runner: macos-15-intel
+            target_arch: x86_64
+            app_bundle_name: OmniDrag-x86_64
+            asset_suffix: x86_64
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify runner toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          gh --version || true
+
+      - name: Build app and pkg
+        env:
+          BUILD_DIR: ${{ github.workspace }}/build/${{ matrix.asset_suffix }}
+          DIST_DIR: ${{ github.workspace }}/dist/${{ matrix.asset_suffix }}
+          TARGET_ARCH: ${{ matrix.target_arch }}
+          APP_BUNDLE_NAME: ${{ matrix.app_bundle_name }}
+        run: |
+          ./scripts/package.sh
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$DIST_DIR/${APP_BUNDLE_NAME}.app" \
+            "$DIST_DIR/OmniDrag-${{ matrix.asset_suffix }}.app.zip"
+          shasum -a 256 \
+            "$DIST_DIR/OmniDrag-${{ matrix.asset_suffix }}.app.zip" \
+            "$DIST_DIR/OmniDrag-${{ matrix.asset_suffix }}.pkg"
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.asset_suffix }}
+          path: |
+            dist/${{ matrix.asset_suffix }}/OmniDrag-${{ matrix.asset_suffix }}.app.zip
+            dist/${{ matrix.asset_suffix }}/OmniDrag-${{ matrix.asset_suffix }}.pkg
+          if-no-files-found: error
+
+  publish:
+    name: Publish Release Assets
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Determine tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ -n "${INPUT_TAG}" ]; then
+            echo "value=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Create release if missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          if ! gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
+            gh release create "$TAG" -R "$REPO" --title "$TAG" --generate-notes
+          fi
+
+      - name: Upload assets to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          gh release upload "$TAG" -R "$REPO" release-assets/* --clobber
+          gh release view "$TAG" -R "$REPO" --json assets \
+            --jq '.assets[] | [.name, .digest, (.size|tostring)] | @tsv'
