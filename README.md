@@ -68,12 +68,27 @@ You can also run the `Release` workflow manually for an existing tag via `workfl
 
 OmniDrag uses the macOS Accessibility API (`AXUIElement`) to detect the window under the cursor and programmatically set its position or size. It monitors global keyboard modifier flags and mouse movement events to provide a seamless drag/resize experience.
 
+Window matching uses the owner process and geometry from CoreGraphics, then prefers standard AX windows and dialogs under the pointer over auxiliary overlays.
+This handles applications such as Feishu that expose a watermark window with the same bounds as the main window.
+Unknown AX window types remain supported when no standard window or dialog contains the pointer.
+
+### Regression checks
+
+```bash
+mkdir -p build
+swiftc Sources/WindowSelection.swift Tests/WindowSelectionTests.swift -o build/window-selection-tests
+./build/window-selection-tests
+```
+
+These checks cover candidate selection; live Accessibility permission and move/resize behavior must also be verified in the installed app.
+
 ## Project Structure
 
 ```
 Sources/
 ├── main.swift            # App entry point
 ├── AppDelegate.swift     # Core logic: event handling, window tracking, move/resize
+├── WindowSelection.swift # Rank standard windows/dialogs ahead of auxiliary overlays
 └── DragLogger.swift      # File-based logging (~/.local/share/omnidrag/log/)
 Resources/
 ├── Info.plist            # App metadata

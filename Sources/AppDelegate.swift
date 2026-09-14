@@ -420,8 +420,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let appWindowList = unsafeBitCast(appWindowListRef, to: CFArray.self)
         let count = CFArrayGetCount(appWindowList)
-        var bestContainingWindow: AXUIElement?
-        var bestContainingScore: CGFloat = .greatestFiniteMagnitude
+        var windows: [AXUIElement] = []
+        var candidates: [WindowSelection.Candidate] = []
         for index in 0..<count {
             let element = CFArrayGetValueAtIndex(appWindowList, index)
             let window = unsafeBitCast(element, to: AXUIElement.self)
@@ -432,26 +432,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 continue
             }
 
-            let frame = CGRect(origin: origin, size: size)
-            if framesMatch(frame, bounds) {
-                return window
-            }
-
-            let expandedFrame = frame.insetBy(dx: -12, dy: -12)
-            if expandedFrame.contains(position) {
-                let score =
-                    abs(frame.origin.x - bounds.origin.x)
-                    + abs(frame.origin.y - bounds.origin.y)
-                    + abs(frame.size.width - bounds.size.width)
-                    + abs(frame.size.height - bounds.size.height)
-                if score < bestContainingScore {
-                    bestContainingScore = score
-                    bestContainingWindow = window
-                }
-            }
+            windows.append(window)
+            candidates.append(WindowSelection.Candidate(
+                frame: CGRect(origin: origin, size: size),
+                subrole: copyStringAttribute(kAXSubroleAttribute, from: window)
+            ))
         }
 
-        return bestContainingWindow
+        guard let index = WindowSelection.bestIndex(in: candidates, bounds: bounds, position: position) else {
+            return nil
+        }
+        logger.log("Matched window pid=\(pid), subrole=\(candidates[index].subrole ?? "unknown"), frame=\(candidates[index].frame)")
+        return windows[index]
     }
 
     private func moveWindow(to position: CGPoint, requestVersion: UInt64, requestedPosition: CGPoint) {
@@ -620,13 +612,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return valueRef as? String
-    }
-
-    private func framesMatch(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
-        approximatelyEqual(lhs.origin.x, rhs.origin.x)
-            && approximatelyEqual(lhs.origin.y, rhs.origin.y)
-            && approximatelyEqual(lhs.size.width, rhs.size.width)
-            && approximatelyEqual(lhs.size.height, rhs.size.height)
     }
 
     private func approximatelyEqual(_ lhs: CGFloat, _ rhs: CGFloat, tolerance: CGFloat = 1) -> Bool {
