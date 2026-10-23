@@ -6,6 +6,8 @@ Inspired by Linux window managers where `Alt+Drag` moves/resizes windows from an
 
 ## Usage
 
+![OmniDrag demo: holding ⇧ ⌘ and moving the mouse moves the window; holding ⇧ ⌥ and moving the mouse resizes it](docs/demo.gif)
+
 | Action | Shortcut |
 |--------|----------|
 | **Move window** | `Shift (⇧)` + `Command (⌘)` + Mouse Move |
