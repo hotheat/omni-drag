@@ -137,8 +137,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          old_builds=$(gh api --paginate --slurp "repos/$REPO/releases?per_page=100" \
-            --jq '[.[][] | select(.tag_name | startswith("build-"))] | sort_by(.published_at) | reverse | .[10:][] | .tag_name')
+          old_builds=$(gh release list -R "$REPO" --limit 200 --json tagName,publishedAt \
+            --jq '[.[] | select(.tagName | startswith("build-"))] | sort_by(.publishedAt) | reverse | .[10:][] | .tagName')
           while IFS= read -r tag; do
             [ -n "$tag" ] || continue
             if ! gh release delete "$tag" -R "$REPO" --yes --cleanup-tag; then
