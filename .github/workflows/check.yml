@@ -1,0 +1,40 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Lint app metadata
+        run: plutil -lint Resources/Info.plist
+
+      - name: Check shell syntax
+        run: |
+          zsh -n scripts/*.sh
+          # zsh parses only the first script; check the second one explicitly.
+          zsh -n scripts/package.sh
+
+      - name: Run unit tests
+        run: |
+          mkdir -p build
+          swiftc Sources/WindowSelection.swift Tests/WindowSelectionTests.swift -o build/window-selection-tests && ./build/window-selection-tests
+
+      - name: Build app and pkg
+        env:
+          BUILD_DIR: ${{ runner.temp }}/omni-drag-build
+          DIST_DIR: ${{ runner.temp }}/omni-drag-dist
+        run: ./scripts/package.sh

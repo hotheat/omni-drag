@@ -2,6 +2,7 @@ name: Release
 
 on:
   push:
+    branches: [main]
     tags:
       - "v*"
   workflow_dispatch:
@@ -15,8 +16,9 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref_name || inputs.tag }}
-  cancel-in-progress: false
+  # Serialize by release target; only rolling builds cancel an older run.
+  group: release-${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || 'latest' }}
+  cancel-in-progress: ${{ (inputs.tag || (github.ref_type == 'tag' && github.ref_name) || 'latest') == 'latest' }}
 
 jobs:
   build:
@@ -82,10 +84,12 @@ jobs:
         env:
           INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ -n "${INPUT_TAG}" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "${INPUT_TAG}" ]; then
             echo "value=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
-          else
+          elif [[ "$GITHUB_REF_TYPE" = "tag" && "$GITHUB_REF_NAME" = v* ]]; then
             echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=latest" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Download release assets
@@ -101,7 +105,16 @@ jobs:
           REPO: ${{ github.repository }}
           TAG: ${{ steps.tag.outputs.value }}
         run: |
-          if ! gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
+          if [ "$TAG" = "latest" ]; then
+            printf 'Rolling build from main.\n\nCommit: %s\nBuilt: %s\n' \
+              "$GITHUB_SHA" "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" > release-notes.md
+            if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
+              gh release edit "$TAG" -R "$REPO" --latest=false --notes-file release-notes.md
+            else
+              gh release create "$TAG" -R "$REPO" --title "main build" \
+                --target "$GITHUB_SHA" --latest=false --notes-file release-notes.md
+            fi
+          elif ! gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
             gh release create "$TAG" -R "$REPO" --title "$TAG" --generate-notes
           fi
 
