@@ -57,22 +57,24 @@ TARGET_ARCH=x86_64 APP_BUNDLE_NAME=OmniDrag-x86_64 ./scripts/package.sh
 
 ## Release
 
-Tag pushes matching `v*` trigger GitHub Actions to build and upload:
+Each push to `main` publishes its own `build-<timestamp>` release, marked latest.
+Only the 10 most recent build releases are kept.
+Tag pushes matching `v*` publish a versioned release which also becomes latest.
+GitHub Actions builds and uploads:
 
 - `OmniDrag-arm64.app.zip`
 - `OmniDrag-arm64.pkg`
 - `OmniDrag-x86_64.app.zip`
 - `OmniDrag-x86_64.pkg`
 
-You can also run the `Release` workflow manually for an existing tag via `workflow_dispatch`.
+You can also run the `Release` workflow manually for an existing tag via `workflow_dispatch`, or leave the tag empty to publish a new build release.
 
-Pushes to `main` refresh the rolling build assets at these stable URLs:
+Download assets from the latest release at these stable URLs:
 
-- [OmniDrag-arm64.pkg](https://github.com/hotheat/omni-drag/releases/download/latest/OmniDrag-arm64.pkg)
-- [OmniDrag-arm64.app.zip](https://github.com/hotheat/omni-drag/releases/download/latest/OmniDrag-arm64.app.zip)
+- [OmniDrag-arm64.pkg](https://github.com/hotheat/omni-drag/releases/latest/download/OmniDrag-arm64.pkg)
+- [OmniDrag-arm64.app.zip](https://github.com/hotheat/omni-drag/releases/latest/download/OmniDrag-arm64.app.zip)
 
-The rolling release notes include the commit SHA and build date.
-[releases/latest](https://github.com/hotheat/omni-drag/releases/latest) continues to point to the newest tagged version.
+Build release notes include the commit SHA and build timestamp.
 
 ## How It Works
 
